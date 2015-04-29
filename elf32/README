@@ -1,0 +1,16 @@
+Simple application that injects a given interceptor into an ELF32
+executable.
+
+In order to use this script you have to download the pyelftools
+library[1] and put it into the PYTHONPATH environment variable.
+
+Usage: ./elf32_injector <elf32-file> <intcerp-file>
+
+where elf32-file is the executable file and intcerp-file contains the
+binary code to be used as interceptor.
+
+As an example, you can use the code from the test directory that prints to
+stdout the intercepted function's ID via a write syscall.  The output is in
+binary form, so a good idea would be to redirect it to a tool like hexdump.
+
+[1] https://github.com/eliben/pyelftools
