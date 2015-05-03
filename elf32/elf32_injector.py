@@ -58,8 +58,8 @@ class ELF32_Injector:
     def _modify_got_entry(self, i, int_size):
         self._seek_for_got_entry(i)
 
-        # the offset of the 'jmp PLT[0]' instruction after the interceptor code
-        offset = struct.pack('i', 0x08048000 + self._intcerp_offset + int_size + 3)
+        # the offset of 'push eax' instruction after the interceptor code
+        offset = struct.pack('i', 0x08048000 + self._intcerp_offset + int_size + 2)
         self._elf_stream.write(offset)
 
     def _modify_plt(self):
@@ -68,20 +68,17 @@ class ELF32_Injector:
 
     def _modify_plt_entry(self, i):
         self._seek_for_plt_entry(i)
-        entry = self._elf_stream.read(0x10) # old PLT[i]
-        self._seek_for_plt_entry(i)
-        self._elf_stream.write(entry[6:11])             # push ID
-        self._elf_stream.write('\xff\x35' + entry[2:6]) # push *GOT[i + 2]
-
-        intcerp_offset = struct.pack('i', self._intcerp_offset - self._elf_stream.tell() - 5)
-        self._elf_stream.write('\xe9' + intcerp_offset) # jmp interceptor
+        self._elf_stream.write('\xff\x35') # opcode for push
+        self._elf_stream.seek(10, 1)
+        intcerp_offset = struct.pack('i', self._intcerp_offset - self._elf_stream.tell() - 4)
+        self._elf_stream.write(intcerp_offset) # jmp interceptor
 
     def _inject_code(self, intcerp_code):
         self._elf_stream.seek(self._intcerp_offset, 0)
         self._elf_stream.write(intcerp_code) # interceptor code
         self._elf_stream.write('\x58')       # pop eax
-        self._elf_stream.write('\xff\xe0')   # jmp *eax
-
+        self._elf_stream.write('\xc3')       # ret
+        self._elf_stream.write('\x50')       # push eax
         plt0_offset = struct.pack('i', self._plt_offset - self._elf_stream.tell() - 5)
         self._elf_stream.write('\xe9' + plt0_offset) # jmp PLT[0]
 
