@@ -91,8 +91,6 @@ class ELF32_Injector:
 
         self._elf_stream.seek(self._intcerp_offset, 0)
         self._elf_stream.write(intcerp_code)  # interceptor code
-        self._elf_stream.write('\x58')        # pop eax
-        self._elf_stream.write('\xc3')        # ret
 
     def inject(self, intcerp_code):
         self._modify_got()
