@@ -1,7 +1,9 @@
 #include <stddef.h>
 #include "interceptor.h"
 
-int write(int fd, const void *buf, size_t size)
+#define STDOUT_FILENO 1
+
+static int write(int fd, const void *buf, size_t size)
 {
 	int rc;
 
@@ -15,8 +17,22 @@ int write(int fd, const void *buf, size_t size)
 	return rc;
 }
 
-int interceptor(const int fid)
+static size_t strlen(const char *s)
 {
-	write(1, &fid, sizeof(int));
+	const char *p;
+
+	for (p = s; *p != '\0'; p++)
+		;
+
+	return p - s;
+}
+
+int interceptor(const char *const fname, const int fid)
+{
+	char nl = '\n';
+
+	write(STDOUT_FILENO, fname, strlen(fname));
+	write(STDOUT_FILENO, &nl, 1);
+
 	return 0;
 }
