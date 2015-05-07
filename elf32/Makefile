@@ -1,6 +1,6 @@
 CC = gcc
 AS = as
-CFLAGS = -m32 -Wall -O0
+CFLAGS = -m32 -Wall -O0 -fno-stack-protector
 ASFLAGS = --32
 
 .PHONY: all clean
