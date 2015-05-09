@@ -14,20 +14,28 @@ from elftools.elf.elffile import ELFFile
 
 class ELF32_Injector:
 
+    _GOT_ENTRY_SIZE = 0x04
+    _PLT_ENTRY_SIZE = 0x10
+    _DYN_CODE_SIZE = 6          # size of the code that jumps to PLT[0]
+    _GOT_FIRST_ENTRY = 3
+    _PLT_FIRST_ENTRY = 1
+
     def __init__(self, elf_filename):
         self._elf_stream = open(elf_filename, 'r+b')
         elf = ELFFile(self._elf_stream)
         self._got_offset = ELF32_Injector._section_offset(elf, '.got.plt')
         self._got_size = ELF32_Injector._section_size(elf, '.got.plt')
-        self._got_num_entries = self._got_size / 0x04
+        self._got_num_entries = self._got_size / ELF32_Injector._GOT_ENTRY_SIZE
         self._plt_offset = ELF32_Injector._section_offset(elf, '.plt')
         self._plt_size = ELF32_Injector._section_size(elf, '.plt')
-        self._plt_num_entries = self._plt_size / 0x10
+        self._plt_num_entries = self._plt_size / ELF32_Injector._PLT_ENTRY_SIZE
 
+        eh_frame_addr = ELF32_Injector._section_addr(elf, '.eh_frame')
         eh_frame_offset = ELF32_Injector._section_offset(elf, '.eh_frame')
         eh_frame_size = ELF32_Injector._section_size(elf, '.eh_frame')
+        self._dyn_addr = eh_frame_addr + eh_frame_size
         self._dyn_offset = eh_frame_offset + eh_frame_size
-        self._intcerp_offset = self._dyn_offset + 6
+        self._intcerp_offset = self._dyn_offset + ELF32_Injector._DYN_CODE_SIZE
 
         init_array_offset = ELF32_Injector._section_offset(elf, '.init_array')
         self._intcerp_max_size = init_array_offset - self._intcerp_offset
@@ -40,6 +48,10 @@ class ELF32_Injector:
         return elf.get_section_by_name(section)
 
     @staticmethod
+    def _section_addr(elf, section):
+        return ELF32_Injector._get_section(elf, section)['sh_addr']
+
+    @staticmethod
     def _section_offset(elf, section):
         return ELF32_Injector._get_section(elf, section)['sh_offset']
 
@@ -48,29 +60,30 @@ class ELF32_Injector:
         return ELF32_Injector._get_section(elf, section)['sh_size']
 
     def _got_entry_offset(self, i):
-        return self._got_offset + i * 0x04
+        return self._got_offset + i * ELF32_Injector._GOT_ENTRY_SIZE
 
     def _seek_for_got_entry(self, i):
         self._elf_stream.seek(self._got_entry_offset(i), 0)
 
     def _plt_entry_offset(self, i):
-        return self._plt_offset + i * 0x10
+        return self._plt_offset + i * ELF32_Injector._PLT_ENTRY_SIZE
 
     def _seek_for_plt_entry(self, i):
         self._elf_stream.seek(self._plt_entry_offset(i), 0)
 
     def _modify_got(self):
-        for i in xrange(3, self._got_num_entries):
+        for i in xrange(ELF32_Injector._GOT_FIRST_ENTRY,
+                        self._got_num_entries):
             self._modify_got_entry(i)
 
     def _modify_got_entry(self, i):
         self._seek_for_got_entry(i)
-        dyn_addr = 0x08048000 + self._dyn_offset
-        dyn_addr_str = struct.pack('i', dyn_addr)
-        self._elf_stream.write(dyn_addr_str)
+        dyn_addr_bytes = int32_to_bytes(self._dyn_addr)
+        self._elf_stream.write(dyn_addr_bytes)
 
     def _modify_plt(self):
-        for i in xrange(1, self._plt_num_entries):
+        for i in xrange(ELF32_Injector._PLT_FIRST_ENTRY,
+                        self._plt_num_entries):
             self._modify_plt_entry(i)
 
     def _modify_plt_entry(self, i):
@@ -79,15 +92,15 @@ class ELF32_Injector:
 
         self._elf_stream.seek(10, 1)
         intcerp_offset = self._intcerp_offset - self._elf_stream.tell() - 4
-        intcerp_offset_str = struct.pack('i', intcerp_offset)
-        self._elf_stream.write(intcerp_offset_str)  # jmp interceptor
+        intcerp_offset_bytes = int32_to_bytes(intcerp_offset)
+        self._elf_stream.write(intcerp_offset_bytes)  # jmp interceptor
 
     def _inject_code(self, intcerp_code):
         self._elf_stream.seek(self._dyn_offset, 0)
         self._elf_stream.write('\x50')        # push eax
         plt0_offset = self._plt_offset - self._elf_stream.tell() - 5
-        plt0_offset_str = struct.pack('i', plt0_offset)
-        self._elf_stream.write('\xe9' + plt0_offset_str)  # jmp PLT[0]
+        plt0_offset_bytes = int32_to_bytes(plt0_offset)
+        self._elf_stream.write('\xe9' + plt0_offset_bytes)  # jmp PLT[0]
 
         self._elf_stream.seek(self._intcerp_offset, 0)
         self._elf_stream.write(intcerp_code)  # interceptor code
@@ -96,6 +109,10 @@ class ELF32_Injector:
         self._modify_got()
         self._modify_plt()
         self._inject_code(intcerp_code)
+
+
+def int32_to_bytes(num):
+    return struct.pack('i', num)
 
 
 def inject(elf_filename, intcerp_filename):
