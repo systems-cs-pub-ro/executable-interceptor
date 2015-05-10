@@ -1,17 +1,19 @@
 #!/usr/bin/python
 
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 # Simple application that injects a given interceptor into an ELF32 executable
 #
 # Author: Octavian Crintea
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
 import sys
 import os
 import struct
 from elftools.elf.elffile import ELFFile
 
+
 class ELF32_Injector:
+
     def __init__(self, elf_filename):
         self._elf_stream = open(elf_filename, 'r+b')
         elf = ELFFile(self._elf_stream)
@@ -21,8 +23,13 @@ class ELF32_Injector:
         self._plt_offset = ELF32_Injector._section_offset(elf, '.plt')
         self._plt_size = ELF32_Injector._section_size(elf, '.plt')
         self._plt_num_entries = self._plt_size / 0x10
-        self._intcerp_offset = ELF32_Injector._section_offset(elf, '.eh_frame') + ELF32_Injector._section_size(elf, '.eh_frame')
-        self._intcerp_max_size = ELF32_Injector._section_offset(elf, '.init_array') - self._intcerp_offset
+
+        eh_frame_offset = ELF32_Injector._section_offset(elf, '.eh_frame')
+        eh_frame_size = ELF32_Injector._section_size(elf, '.eh_frame')
+        self._intcerp_offset = eh_frame_offset + eh_frame_size
+
+        init_array_offset = ELF32_Injector._section_offset(elf, '.init_array')
+        self._intcerp_max_size = init_array_offset - self._intcerp_offset
 
     def __del__(self):
         self._elf_stream.close()
@@ -58,9 +65,10 @@ class ELF32_Injector:
     def _modify_got_entry(self, i, int_size):
         self._seek_for_got_entry(i)
 
-        # the offset of the 'jmp PLT[0]' instruction after the interceptor code
-        offset = struct.pack('i', 0x08048000 + self._intcerp_offset + int_size + 3)
-        self._elf_stream.write(offset)
+        # the offset of 'push eax' instruction after the interceptor code
+        offset = 0x08048000 + self._intcerp_offset + int_size + 2
+        offset_str = struct.pack('i', offset)
+        self._elf_stream.write(offset_str)
 
     def _modify_plt(self):
         for i in xrange(1, self._plt_num_entries):
@@ -68,27 +76,29 @@ class ELF32_Injector:
 
     def _modify_plt_entry(self, i):
         self._seek_for_plt_entry(i)
-        entry = self._elf_stream.read(0x10) # old PLT[i]
-        self._seek_for_plt_entry(i)
-        self._elf_stream.write(entry[6:11])             # push ID
-        self._elf_stream.write('\xff\x35' + entry[2:6]) # push *GOT[i + 2]
+        self._elf_stream.write('\xff\x35')  # opcode for push
 
-        intcerp_offset = struct.pack('i', self._intcerp_offset - self._elf_stream.tell() - 5)
-        self._elf_stream.write('\xe9' + intcerp_offset) # jmp interceptor
+        self._elf_stream.seek(10, 1)
+        intcerp_offset = self._intcerp_offset - self._elf_stream.tell() - 4
+        intcerp_offset_str = struct.pack('i', intcerp_offset)
+        self._elf_stream.write(intcerp_offset_str)  # jmp interceptor
 
     def _inject_code(self, intcerp_code):
         self._elf_stream.seek(self._intcerp_offset, 0)
-        self._elf_stream.write(intcerp_code) # interceptor code
-        self._elf_stream.write('\x58')       # pop eax
-        self._elf_stream.write('\xff\xe0')   # jmp *eax
+        self._elf_stream.write(intcerp_code)  # interceptor code
+        self._elf_stream.write('\x58')        # pop eax
+        self._elf_stream.write('\xc3')        # ret
+        self._elf_stream.write('\x50')        # push eax
 
-        plt0_offset = struct.pack('i', self._plt_offset - self._elf_stream.tell() - 5)
-        self._elf_stream.write('\xe9' + plt0_offset) # jmp PLT[0]
+        plt0_offset = self._plt_offset - self._elf_stream.tell() - 5
+        plt0_offset_str = struct.pack('i', plt0_offset)
+        self._elf_stream.write('\xe9' + plt0_offset_str)  # jmp PLT[0]
 
     def inject(self, intcerp_code):
         self._modify_got(intcerp_code)
         self._modify_plt()
         self._inject_code(intcerp_code)
+
 
 def inject(elf_filename, intcerp_filename):
     with open(intcerp_filename, 'rb') as intcerp_stream:
@@ -97,9 +107,10 @@ def inject(elf_filename, intcerp_filename):
     elf = ELF32_Injector(elf_filename)
     elf.inject(intcerp_code)
 
+
 def main(args):
     if len(args) != 3:
-        print 'Usage: %s <elf32-file> <intcerp-file>' % args[0]
+        print 'Usage: %s elf32-file intcerp-file' % args[0]
         sys.exit(1)
 
     inject(args[1], args[2])

@@ -7,7 +7,7 @@
 
 interceptor:
 	movl	$0x01, %ebx
-	leal	0x04(%esp), %ecx
+	movl	%esp, %ecx
 	movl	$0x04, %edx
 	movl	$0x04, %eax
 	int	$0x80
