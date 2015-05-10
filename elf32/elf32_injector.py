@@ -9,6 +9,7 @@
 import sys
 import os
 import struct
+from subprocess import call
 from elftools.elf.elffile import ELFFile
 
 
@@ -39,6 +40,10 @@ class ELF32_Injector:
 
         init_array_offset = ELF32_Injector._section_offset(elf, '.init_array')
         self._intcerp_max_size = init_array_offset - self._intcerp_offset
+
+        self._rel_plt_addr = ELF32_Injector._section_addr(elf, '.rel.plt')
+        self._dynsym_addr = ELF32_Injector._section_addr(elf, '.dynsym')
+        self._dynstr_addr = ELF32_Injector._section_addr(elf, '.dynstr')
 
     def __del__(self):
         self._elf_stream.close()
@@ -105,30 +110,60 @@ class ELF32_Injector:
         self._elf_stream.seek(self._intcerp_offset, 0)
         self._elf_stream.write(intcerp_code)  # interceptor code
 
-    def inject(self, intcerp_code):
+    def inject_direct(self, intcerp_code):
         self._modify_got()
         self._modify_plt()
         self._inject_code(intcerp_code)
+
+    def inject(self, intcerp_obj):
+        call(['make',
+              '-f',
+              'Makefile.interceptor',
+              'REL_PLT=' + str(self._rel_plt_addr),
+              'DYN_SYM=' + str(self._dynsym_addr),
+              'DYN_STR=' + str(self._dynstr_addr),
+              'INTERCEPTOR_OBJ=' + intcerp_obj])
+        self.inject_direct(readfile('run.hex'))
+        call(['make', '-f', 'Makefile.interceptor', 'clean'])
 
 
 def int32_to_bytes(num):
     return struct.pack('i', num)
 
 
-def inject(elf_filename, intcerp_filename):
-    with open(intcerp_filename, 'rb') as intcerp_stream:
-        intcerp_code = intcerp_stream.read()
+def readfile(filename):
+    with open(filename, 'rb') as stream:
+        return stream.read()
 
+
+def inject_direct(elf_filename, intcerp_filename):
     elf = ELF32_Injector(elf_filename)
-    elf.inject(intcerp_code)
+    elf.inject_direct(readfile(intcerp_filename))
+
+
+def inject(elf_filename, intcerp_obj):
+    elf = ELF32_Injector(elf_filename)
+    elf.inject(intcerp_obj)
+
+
+def usage(name):
+    print 'Usage: %s elf32-file intcerp-obj' % name
+    print '       %s --direct elf32-file intcerp-file' % name
 
 
 def main(args):
-    if len(args) != 3:
-        print 'Usage: %s elf32-file intcerp-file' % args[0]
+    if len(args) < 3 or len(args) > 4:
+        usage(args[0])
         sys.exit(1)
 
-    inject(args[1], args[2])
+    if len(args) == 4 and args[1] != '--direct':
+        usage(args[0])
+        sys.exit(1)
+
+    if len(args) == 3:
+        inject(args[1], args[2])
+    else:
+        inject_direct(args[2], args[3])
 
 if __name__ == '__main__':
     main(sys.argv)

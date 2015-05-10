@@ -1,10 +1,11 @@
 run_interceptor:
 	movl	(%esp), %eax
-	movl	0x080482b4(%eax), %eax # .rel.plt
+	add	$4, %eax
+	movl	REL_PLT(%eax), %eax # .rel.plt
 	shr	$8, %eax
 	shl	$4, %eax
-	movl	0x080481cc(%eax), %eax # .dynsym
-	leal	0x0804822c(%eax), %eax # .dynstr
+	movl	DYN_SYM(%eax), %eax # .dynsym
+	leal	DYN_STR(%eax), %eax # .dynstr
 	push	%eax
 	call	interceptor
 	pop	%eax
