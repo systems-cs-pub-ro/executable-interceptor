@@ -11,3 +11,5 @@ interceptor:
 	movl	$0x04, %edx
 	movl	$0x04, %eax
 	int	$0x80
+	pop	%eax
+	ret

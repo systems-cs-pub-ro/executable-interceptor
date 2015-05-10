@@ -1,6 +1,4 @@
-CC = gcc
 AS = as
-CFLAGS = -m32 -Wall -O0 -fno-stack-protector
 ASFLAGS = --32
 
 .PHONY: all clean
@@ -17,4 +15,4 @@ run_interceptor1.s: run_interceptor.s
 	cpp -DREL_PLT=$(REL_PLT) -DDYN_SYM=$(DYN_SYM) -DDYN_STR=$(DYN_STR) $< -o $@
 
 clean:
-	rm -f *.o *~ *.hex run_interceptor1.s
+	rm -f *.o *~ run.hex run_interceptor1.s
