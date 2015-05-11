@@ -17,7 +17,7 @@ class ELF32_Injector:
 
     _GOT_ENTRY_SIZE = 0x04
     _PLT_ENTRY_SIZE = 0x10
-    _DYN_CODE_SIZE = 6          # size of the code that jumps to PLT[0]
+    _DYN_CODE_SIZE = 8          # size of the code that jumps to PLT[0]
     _GOT_FIRST_ENTRY = 3
     _PLT_FIRST_ENTRY = 1
 
@@ -27,6 +27,7 @@ class ELF32_Injector:
         self._got_offset = ELF32_Injector._section_offset(elf, '.got.plt')
         self._got_size = ELF32_Injector._section_size(elf, '.got.plt')
         self._got_num_entries = self._got_size / ELF32_Injector._GOT_ENTRY_SIZE
+        self._plt_addr = ELF32_Injector._section_addr(elf, '.plt')
         self._plt_offset = ELF32_Injector._section_offset(elf, '.plt')
         self._plt_size = ELF32_Injector._section_size(elf, '.plt')
         self._plt_num_entries = self._plt_size / ELF32_Injector._PLT_ENTRY_SIZE
@@ -102,12 +103,6 @@ class ELF32_Injector:
 
     def _inject_code(self, intcerp_code):
         self._elf_stream.seek(self._dyn_offset, 0)
-        self._elf_stream.write('\x50')        # push eax
-        plt0_offset = self._plt_offset - self._elf_stream.tell() - 5
-        plt0_offset_bytes = int32_to_bytes(plt0_offset)
-        self._elf_stream.write('\xe9' + plt0_offset_bytes)  # jmp PLT[0]
-
-        self._elf_stream.seek(self._intcerp_offset, 0)
         self._elf_stream.write(intcerp_code)  # interceptor code
 
     def inject_direct(self, intcerp_code):
@@ -119,6 +114,7 @@ class ELF32_Injector:
         call(['make',
               '-f',
               'Makefile.interceptor',
+              'PLT0=' + str(self._plt_addr),
               'REL_PLT=' + str(self._rel_plt_addr),
               'DYN_SYM=' + str(self._dynsym_addr),
               'DYN_STR=' + str(self._dynstr_addr),
