@@ -27,7 +27,7 @@ static size_t strlen(const char *s)
 	return p - s;
 }
 
-int interceptor(const char *const fname, const int fid)
+int interceptor(void * *const data, const char *const fname, const int fid)
 {
 	char nl = '\n';
 

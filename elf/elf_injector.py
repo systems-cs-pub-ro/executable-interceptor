@@ -46,6 +46,8 @@ class ELF_Injector(ELFFile):
         self.DYNSYM_ADDR = self.section_addr('.dynsym')
         self.DYNSTR_ADDR = self.section_addr('.dynstr')
         self.ENTRY_ADDR = self['e_entry']
+        self.ADDITIONAL_DATA_ADDR = \
+            self.section_addr('.bss') + self.section_size('.bss')
 
     def __del__(self):
         self.stream.close()
@@ -94,6 +96,14 @@ class ELF_Injector(ELFFile):
         interceptor_rel_off_bytes = int32_to_bytes(interceptor_rel_off)
         self.stream.write(interceptor_rel_off_bytes)  # jmp interceptor
 
+    def increase_bss(self):
+        bss = self.get_section_by_name('.bss')
+        bss_hdr = bss.header
+        bss_hdr.sh_size += 8
+        bss_section_num = self._section_name_map.get('.bss', None)
+        self.stream.seek(self._section_offset(bss_section_num))
+        self.structs.Elf_Shdr.build_stream(bss_hdr, self.stream)
+
     def inject_code(self, code):
         self.stream.seek(self.TEXT_SEG_END_OFFSET)
         self.stream.write(code)
@@ -107,6 +117,7 @@ class ELF_Injector(ELFFile):
                          'DYN_SYM=' + str(self.DYNSYM_ADDR),
                          'DYN_STR=' + str(self.DYNSTR_ADDR),
                          'ENTRY=' + str(self.ENTRY_ADDR),
+                         'ADDITIONAL_DATA=' + str(self.ADDITIONAL_DATA_ADDR),
                          'INTERCEPTOR_OBJ=' + interceptor_obj])
 
         with open('all.out', 'rb') as all_out_stream:
@@ -134,8 +145,19 @@ class ELF_Injector(ELFFile):
             self.stream.seek(0)
             self.structs.Elf_Ehdr.build_stream(self.header, self.stream)
 
+            # update _start label
+            symtab = self.get_section_by_name('.symtab')
+            _start = symtab.get_symbol_by_name('_start')[0].entry
+            _start_num = symtab._symbol_name_map.get('_start')[0]
+            _start.st_value = pre_main_addr
+            self.stream.seek(symtab['sh_offset'] +
+                             _start_num * symtab['sh_entsize'])
+            self.structs.Elf_Sym.build_stream(_start, self.stream)
+
             code = text.data()
             self.inject_code(code)
+
+            self.increase_bss()
 
             subprocess.call(['make', '-f', 'Makefile.interceptor', 'clean'])
 
