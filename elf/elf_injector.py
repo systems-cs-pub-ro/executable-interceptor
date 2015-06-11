@@ -32,7 +32,7 @@ class ELF_Injector(ELFFile):
         self.PLT_SIZE = plt['sh_size']
         self.PLT_FIRST_ENTRY = 1
 
-        # PLT_ENTRY_SIZE cannot be retrieved from plt['sh_entsize']
+        # PLT_ENTRY_SIZE cannot be retrieved from plt['sh_entsize'] on i386
         self.PLT_NUM_ENTRIES = \
             self.GOT_NUM_ENTRIES - self.GOT_FIRST_ENTRY + self.PLT_FIRST_ENTRY
         self.PLT_ENTRY_SIZE = self.PLT_SIZE / self.PLT_NUM_ENTRIES
@@ -45,6 +45,7 @@ class ELF_Injector(ELFFile):
         self.REL_PLT_ADDR = self.section_addr('.rel.plt')
         self.DYNSYM_ADDR = self.section_addr('.dynsym')
         self.DYNSTR_ADDR = self.section_addr('.dynstr')
+        self.ENTRY_ADDR = self['e_entry']
 
     def __del__(self):
         self.stream.close()
@@ -105,6 +106,7 @@ class ELF_Injector(ELFFile):
                          'REL_PLT=' + str(self.REL_PLT_ADDR),
                          'DYN_SYM=' + str(self.DYNSYM_ADDR),
                          'DYN_STR=' + str(self.DYNSTR_ADDR),
+                         'ENTRY=' + str(self.ENTRY_ADDR),
                          'INTERCEPTOR_OBJ=' + interceptor_obj])
 
         with open('all.out', 'rb') as all_out_stream:
@@ -122,6 +124,15 @@ class ELF_Injector(ELFFile):
             run_interceptor_offset = \
                 self.TEXT_SEG_END_OFFSET + run_interceptor_off
             self.modify_plt(run_interceptor_offset)
+
+            pre_main = symtab.get_symbol_by_name('pre_main')[0]
+            pre_main_off = pre_main['st_value'] - text['sh_addr']
+            pre_main_addr = self.TEXT_SEG_END_ADDR + pre_main_off
+
+            # update the entry point
+            self.header.e_entry = pre_main_addr
+            self.stream.seek(0)
+            self.structs.Elf_Ehdr.build_stream(self.header, self.stream)
 
             code = text.data()
             self.inject_code(code)
