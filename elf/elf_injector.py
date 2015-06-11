@@ -6,8 +6,9 @@
 # Author: Octavian Crintea
 # -----------------------------------------------------------------------------
 
-from subprocess import call
+from io import SEEK_CUR
 import struct
+import subprocess
 import sys
 
 from elftools.elf.elffile import ELFFile
@@ -36,15 +37,10 @@ class ELF_Injector(ELFFile):
             self.GOT_NUM_ENTRIES - self.GOT_FIRST_ENTRY + self.PLT_FIRST_ENTRY
         self.PLT_ENTRY_SIZE = self.PLT_SIZE / self.PLT_NUM_ENTRIES
 
+        # TODO: magic number 2
         text_seg = self.get_segment(2)
-
-        # TODO: extract the offset of dynamic linker from the object file
-        self.DYNAMIC_LINKER_ADDR = text_seg['p_vaddr'] + text_seg['p_memsz']
-        self.DYNAMIC_LINKER_OFFSET = \
-            text_seg['p_offset'] + text_seg['p_filesz']
-
-        # TODO: extract the offset of interceptor from the object file
-        self.interceptor_offset = self.DYNAMIC_LINKER_OFFSET + 8
+        self.TEXT_SEG_END_ADDR = text_seg['p_vaddr'] + text_seg['p_memsz']
+        self.TEXT_SEG_END_OFFSET = text_seg['p_offset'] + text_seg['p_filesz']
 
         self.REL_PLT_ADDR = self.section_addr('.rel.plt')
         self.DYNSYM_ADDR = self.section_addr('.dynsym')
@@ -74,46 +70,63 @@ class ELF_Injector(ELFFile):
     def seek_for_plt_entry(self, i):
         self.stream.seek(self.plt_entry_offset(i))
 
-    def modify_got(self):
+    def modify_got(self, dynamic_linker_addr):
         for i in xrange(self.GOT_FIRST_ENTRY, self.GOT_NUM_ENTRIES):
-            self.modify_got_entry(i)
+            self.modify_got_entry(i, dynamic_linker_addr)
 
-    def modify_got_entry(self, i):
+    def modify_got_entry(self, i, dynamic_linker_addr):
         self.seek_for_got_entry(i)
-        dynamic_linker_addr_bytes = int32_to_bytes(self.DYNAMIC_LINKER_ADDR)
+        dynamic_linker_addr_bytes = int32_to_bytes(dynamic_linker_addr)
         self.stream.write(dynamic_linker_addr_bytes)
 
-    def modify_plt(self):
+    def modify_plt(self, interceptor_offset):
         for i in xrange(self.PLT_FIRST_ENTRY, self.PLT_NUM_ENTRIES):
-            self.modify_plt_entry(i)
+            self.modify_plt_entry(i, interceptor_offset)
 
-    def modify_plt_entry(self, i):
+    def modify_plt_entry(self, i, run_interceptor_offset):
         self.seek_for_plt_entry(i)
         self.stream.write('\xff\x35')  # opcode for push on i386
 
         # TODO: these numbers will differ for another architecture
-        self.stream.seek(10, 1)
-        interceptor_rel_off = self.interceptor_offset - self.stream.tell() - 4
+        self.stream.seek(10, SEEK_CUR)
+        interceptor_rel_off = run_interceptor_offset - self.stream.tell() - 4
         interceptor_rel_off_bytes = int32_to_bytes(interceptor_rel_off)
         self.stream.write(interceptor_rel_off_bytes)  # jmp interceptor
 
-    def inject_code(self, interceptor_code):
-        self.stream.seek(self.DYNAMIC_LINKER_OFFSET)
-        self.stream.write(interceptor_code)
+    def inject_code(self, code):
+        self.stream.seek(self.TEXT_SEG_END_OFFSET)
+        self.stream.write(code)
 
     def inject(self, interceptor_obj):
-        call(['make',
-              '-f',
-              'Makefile.interceptor',
-              'PLT0=' + str(self.PLT_ADDR),
-              'REL_PLT=' + str(self.REL_PLT_ADDR),
-              'DYN_SYM=' + str(self.DYNSYM_ADDR),
-              'DYN_STR=' + str(self.DYNSTR_ADDR),
-              'INTERCEPTOR_OBJ=' + interceptor_obj])
-        self.modify_got()
-        self.modify_plt()
-        self.inject_code(readfile('run.hex'))
-        call(['make', '-f', 'Makefile.interceptor', 'clean'])
+        subprocess.call(['make',
+                         '-f',
+                         'Makefile.interceptor',
+                         'PLT0=' + str(self.PLT_ADDR),
+                         'REL_PLT=' + str(self.REL_PLT_ADDR),
+                         'DYN_SYM=' + str(self.DYNSYM_ADDR),
+                         'DYN_STR=' + str(self.DYNSTR_ADDR),
+                         'INTERCEPTOR_OBJ=' + interceptor_obj])
+
+        with open('all.out', 'rb') as all_out_stream:
+            all_out = ELFFile(all_out_stream)
+            text = all_out.get_section_by_name('.text')
+            symtab = all_out.get_section_by_name('.symtab')
+
+            dynamic_linker = symtab.get_symbol_by_name('dynamic_linker')[0]
+            dynamic_linker_off = dynamic_linker['st_value'] - text['sh_addr']
+            dynamic_linker_addr = self.TEXT_SEG_END_ADDR + dynamic_linker_off
+            self.modify_got(dynamic_linker_addr)
+
+            run_interceptor = symtab.get_symbol_by_name('run_interceptor')[0]
+            run_interceptor_off = run_interceptor['st_value'] - text['sh_addr']
+            run_interceptor_offset = \
+                self.TEXT_SEG_END_OFFSET + run_interceptor_off
+            self.modify_plt(run_interceptor_offset)
+
+            code = text.data()
+            self.inject_code(code)
+
+            subprocess.call(['make', '-f', 'Makefile.interceptor', 'clean'])
 
 
 def int32_to_bytes(num):
