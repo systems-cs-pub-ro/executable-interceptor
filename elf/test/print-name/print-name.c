@@ -1,23 +1,40 @@
 #include <stddef.h>
+#include <sys/mman.h>
 #include "interceptor.h"
 
-#define STDOUT_FILENO 1
+#define STDERR_FILENO 2
 
-static int write(int fd, const void *buf, size_t size)
+static int my_write(int fd, const void *buf, size_t size)
 {
 	int rc;
 
-	asm("movl    $0x04, %%eax\n"
-	    "int     $0x80\n"
+	asm("int     $0x80\n"
 	    : "=a" (rc)
-	    : "b" (fd),
+	    : "a" (0x4),
+		  "b" (fd),
 	      "c" (buf),
 	      "d" (size));
 
 	return rc;
 }
 
-static size_t strlen(const char *s)
+static void *my_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
+{
+	void *ret_addr;
+
+    asm("int     $0x80\n"
+		: "=a" (ret_addr)
+		: "a" (0xc0),
+		  "b" (addr),
+		  "c" (length),
+		  "d" (prot),
+		  "S" (flags),
+		  "D" (fd));
+
+    return ret_addr;
+}
+
+static size_t my_strlen(const char *s)
 {
 	const char *p;
 
@@ -27,12 +44,24 @@ static size_t strlen(const char *s)
 	return p - s;
 }
 
-int interceptor(void * *const data, const char *const fname, const int fid)
+int init(void *data)
 {
-	char nl = '\n';
+	void **data_ptr = data;
+	*data_ptr = my_mmap(NULL,
+					 	4096,
+						PROT_READ | PROT_WRITE,
+						MAP_PRIVATE | MAP_ANONYMOUS,
+						-1,
+						0);
+	return 0;
+}
 
-	write(STDOUT_FILENO, fname, strlen(fname));
-	write(STDOUT_FILENO, &nl, 1);
+int interceptor(void *data, const char *fname, const int fid)
+{
+	const char nl = '\n';
+
+	my_write(STDERR_FILENO, fname, my_strlen(fname));
+	my_write(STDERR_FILENO, &nl, 1);
 
 	return 0;
 }
