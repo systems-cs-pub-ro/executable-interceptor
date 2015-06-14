@@ -147,12 +147,15 @@ class ELF_Injector(ELFFile):
 
             # update _start label
             symtab = self.get_section_by_name('.symtab')
-            _start = symtab.get_symbol_by_name('_start')[0].entry
-            _start_num = symtab._symbol_name_map.get('_start')[0]
-            _start.st_value = pre_main_addr
-            self.stream.seek(symtab['sh_offset'] +
-                             _start_num * symtab['sh_entsize'])
-            self.structs.Elf_Sym.build_stream(_start, self.stream)
+            if symtab is not None:
+                _start = symtab.get_symbol_by_name('_start')
+                if _start is not None:
+                    _start = _start[0].entry
+                    _start_num = symtab._symbol_name_map.get('_start')[0]
+                    _start.st_value = pre_main_addr
+                    self.stream.seek(symtab['sh_offset'] +
+                                     _start_num * symtab['sh_entsize'])
+                    self.structs.Elf_Sym.build_stream(_start, self.stream)
 
             code = text.data()
             self.inject_code(code)
