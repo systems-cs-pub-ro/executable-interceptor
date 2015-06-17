@@ -63,10 +63,10 @@ class ELF_Injector(ELFFile):
 
     def modify_plt_entry(self, i, run_interceptor_offset):
         self.seek_for_plt_entry(i)
-        off1 = (8 * (i - 1)) & 0xff
-        self.stream.write(int32_to_bytes(0xe24fc000 | off1))
-        off2 = ((8 * (i - 1)) & 0xff00) >> 8
-        self.stream.write(int32_to_bytes(0xe24ccc00 | off2))
+        off1 = (2 * (i - 1)) & 0xff
+        self.stream.write(int32_to_bytes(0xe24fcf00 | off1))
+        off2 = ((2 * (i - 1)) & 0xff00) >> 8
+        self.stream.write(int32_to_bytes(0xe24ccb00 | off2))
         b = 0xea000000  # branch without offset
         b |= (run_interceptor_offset - self.stream.tell() - 8) >> 2
         self.stream.write(int32_to_bytes(b))
