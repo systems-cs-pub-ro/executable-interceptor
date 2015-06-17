@@ -84,11 +84,21 @@ class ELF_Injector(ELFFile):
         C2 = add2 & 0xff
         C1 = (ldr & 0xff0) >> 4
         C0 = ldr & 0xf
+
+        ASLR4 = (self.TEXT_SEG_END_ADDR & 0xff000000) >> 24
+        ASLR3 = (self.TEXT_SEG_END_ADDR & 0x00ff0000) >> 16
+        ASLR2 = (self.TEXT_SEG_END_ADDR & 0x0000ff00) >> 8
+        ASLR1 = self.TEXT_SEG_END_ADDR & 0x000000ff
+
         subprocess.call(['cpp',
                          '-DC3=' + str(C3),
                          '-DC2=' + str(C2),
                          '-DC1=' + str(C1),
                          '-DC0=' + str(C0),
+                         '-DASLR4=' + str(ASLR4),
+                         '-DASLR3=' + str(ASLR3),
+                         '-DASLR2=' + str(ASLR2),
+                         '-DASLR1=' + str(ASLR1),
                          'run_interceptor_arm.s',
                          '-o',
                          'run.s~'])
