@@ -6,7 +6,6 @@
 # Author: Octavian Crintea
 # -----------------------------------------------------------------------------
 
-from io import SEEK_CUR
 import struct
 import subprocess
 import sys
@@ -64,28 +63,41 @@ class ELF_Injector(ELFFile):
 
     def modify_plt_entry(self, i, run_interceptor_offset):
         self.seek_for_plt_entry(i)
-        C = ((bytes_to_int32(self.stream.read(4)) & 0xff) << 20)
-        C += ((bytes_to_int32(self.stream.read(4)) & 0xff) << 12)
-        C += (bytes_to_int32(self.stream.read(4)) & 0xfff)
-        self.stream.seek(-12, SEEK_CUR)
-        self.stream.write(int32_to_bytes(0xe1a0c00f))  # mov ip, pc
+        off1 = (8 * (i - 1)) & 0xff
+        self.stream.write(int32_to_bytes(0xe24fc000 | off1))
+        off2 = ((8 * (i - 1)) & 0xff00) >> 8
+        self.stream.write(int32_to_bytes(0xe24ccc00 | off2))
         b = 0xea000000  # branch without offset
-        b |= ((run_interceptor_offset - self.stream.tell() - 8) >> 2)
+        b |= (run_interceptor_offset - self.stream.tell() - 8) >> 2
         self.stream.write(int32_to_bytes(b))
-        self.stream.write(int32_to_bytes(C))
 
     def inject_code(self, code):
         self.stream.seek(self.TEXT_SEG_END_OFFSET)
         self.stream.write(code)
 
     def inject(self, interceptor_obj):
-
-        subprocess.call(['as',
+        self.stream.seek(self.plt_entry_offset(1))
+        add1 = bytes_to_int32(self.stream.read(4))
+        add2 = bytes_to_int32(self.stream.read(4))
+        ldr = bytes_to_int32(self.stream.read(4))
+        C3 = add1 & 0xff
+        C2 = add2 & 0xff
+        C1 = (ldr & 0xff0) >> 4
+        C0 = ldr & 0xf
+        subprocess.call(['cpp',
+                         '-DC3=' + str(C3),
+                         '-DC2=' + str(C2),
+                         '-DC1=' + str(C1),
+                         '-DC0=' + str(C0),
                          'run_interceptor_arm.s',
                          '-o',
-                         'all.out'])
+                         'run.s~'])
+        subprocess.call(['as',
+                         'run.s~',
+                         '-o',
+                         'all.out~'])
 
-        with open('all.out', 'rb') as all_out_stream:
+        with open('all.out~', 'rb') as all_out_stream:
             run_interceptor_offset = self.TEXT_SEG_END_OFFSET
             self.modify_plt(run_interceptor_offset)
 
