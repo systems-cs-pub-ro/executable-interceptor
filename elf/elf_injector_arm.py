@@ -77,28 +77,16 @@ class ELF_Injector(ELFFile):
 
     def inject(self, interceptor_obj):
         self.stream.seek(self.plt_entry_offset(1))
-        add1 = bytes_to_int32(self.stream.read(4))
-        add2 = bytes_to_int32(self.stream.read(4))
-        ldr = bytes_to_int32(self.stream.read(4))
-        C3 = add1 & 0xff
-        C2 = add2 & 0xff
-        C1 = (ldr & 0xff0) >> 4
-        C0 = ldr & 0xf
 
-        ASLR4 = (self.TEXT_SEG_END_ADDR & 0xff000000) >> 24
-        ASLR3 = (self.TEXT_SEG_END_ADDR & 0x00ff0000) >> 16
-        ASLR2 = (self.TEXT_SEG_END_ADDR & 0x0000ff00) >> 8
-        ASLR1 = self.TEXT_SEG_END_ADDR & 0x000000ff
+        C2 = bytes_to_int32(self.stream.read(4)) & 0xff
+        C1 = bytes_to_int32(self.stream.read(4)) & 0xff
+        C0 = bytes_to_int32(self.stream.read(4)) & 0xfff
+        C = (C2 << 20) + (C1 << 12) + C0
+        ASLR = self.TEXT_SEG_END_ADDR
 
         subprocess.call(['cpp',
-                         '-DC3=' + str(C3),
-                         '-DC2=' + str(C2),
-                         '-DC1=' + str(C1),
-                         '-DC0=' + str(C0),
-                         '-DASLR4=' + str(ASLR4),
-                         '-DASLR3=' + str(ASLR3),
-                         '-DASLR2=' + str(ASLR2),
-                         '-DASLR1=' + str(ASLR1),
+                         '-DC=' + str(C),
+                         '-DASLR=' + str(ASLR),
                          'run_interceptor_arm.s',
                          '-o',
                          'run.s~'])
