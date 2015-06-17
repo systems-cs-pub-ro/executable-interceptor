@@ -33,6 +33,10 @@ class ELF_Injector(ELFFile):
         self.TEXT_SEG_END_OFFSET = text_seg['p_offset'] + text_seg['p_filesz']
         self.TEXT_SEG_END_OFFSET &= ~0x03
 
+        self.REL_PLT_ADDR = self.section_addr('.rel.plt')
+        self.DYNSYM_ADDR = self.section_addr('.dynsym')
+        self.DYNSTR_ADDR = self.section_addr('.dynstr')
+
     def __del__(self):
         self.stream.close()
 
@@ -87,6 +91,9 @@ class ELF_Injector(ELFFile):
         subprocess.call(['cpp',
                          '-DC=' + str(C),
                          '-DVA=' + str(VA),
+                         '-DREL_PLT=' + str(self.REL_PLT_ADDR),
+                         '-DDYNSYM=' + str(self.DYNSYM_ADDR),
+                         '-DDYNSTR=' + str(self.DYNSTR_ADDR),
                          'run_interceptor_arm.s',
                          '-o',
                          'run.s~'])
