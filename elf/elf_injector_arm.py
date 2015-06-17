@@ -63,13 +63,11 @@ class ELF_Injector(ELFFile):
 
     def modify_plt_entry(self, i, run_interceptor_offset):
         self.seek_for_plt_entry(i)
-        off1 = (2 * (i - 1)) & 0xff
-        self.stream.write(int32_to_bytes(0xe24fcf00 | off1))
-        off2 = ((2 * (i - 1)) & 0xff00) >> 8
-        self.stream.write(int32_to_bytes(0xe24ccb00 | off2))
+        self.stream.write(int32_to_bytes(0xe59fc000))  # mov ip, pc
         b = 0xea000000  # branch without offset
         b |= (run_interceptor_offset - self.stream.tell() - 8) >> 2
         self.stream.write(int32_to_bytes(b))
+        self.stream.write(int32_to_bytes(i - 1))
 
     def inject_code(self, code):
         self.stream.seek(self.TEXT_SEG_END_OFFSET)
@@ -82,11 +80,13 @@ class ELF_Injector(ELFFile):
         C1 = bytes_to_int32(self.stream.read(4)) & 0xff
         C0 = bytes_to_int32(self.stream.read(4)) & 0xfff
         C = (C2 << 20) + (C1 << 12) + C0
-        ASLR = self.TEXT_SEG_END_ADDR
+        C += self.plt_entry_offset(1) \
+            + self.TEXT_SEG_END_ADDR - self.TEXT_SEG_END_OFFSET + 8
+        VA = self.TEXT_SEG_END_ADDR
 
         subprocess.call(['cpp',
                          '-DC=' + str(C),
-                         '-DASLR=' + str(ASLR),
+                         '-DVA=' + str(VA),
                          'run_interceptor_arm.s',
                          '-o',
                          'run.s~'])
