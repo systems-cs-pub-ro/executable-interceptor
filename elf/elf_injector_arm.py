@@ -88,21 +88,17 @@ class ELF_Injector(ELFFile):
             + self.TEXT_SEG_END_ADDR - self.TEXT_SEG_END_OFFSET + 8
         VA = self.TEXT_SEG_END_ADDR
 
-        subprocess.call(['cpp',
-                         '-DC=' + str(C),
-                         '-DVA=' + str(VA),
-                         '-DREL_PLT=' + str(self.REL_PLT_ADDR),
-                         '-DDYNSYM=' + str(self.DYNSYM_ADDR),
-                         '-DDYNSTR=' + str(self.DYNSTR_ADDR),
-                         'run_interceptor_arm.s',
-                         '-o',
-                         'run.s~'])
-        subprocess.call(['as',
-                         'run.s~',
-                         '-o',
-                         'all.out~'])
+        subprocess.call(['make',
+                         '-f'
+                         'Makefile.arm',
+                         'C=' + str(C),
+                         'VA=' + str(VA),
+                         'REL_PLT=' + str(self.REL_PLT_ADDR),
+                         'DYNSYM=' + str(self.DYNSYM_ADDR),
+                         'DYNSTR=' + str(self.DYNSTR_ADDR),
+                         'INTERCEPTOR_OBJ=' + interceptor_obj])
 
-        with open('all.out~', 'rb') as all_out_stream:
+        with open('all.out', 'rb') as all_out_stream:
             run_interceptor_offset = self.TEXT_SEG_END_OFFSET
             self.modify_plt(run_interceptor_offset)
 
@@ -110,6 +106,8 @@ class ELF_Injector(ELFFile):
             text = all_out.get_section_by_name('.text')
             code = text.data()
             self.inject_code(code)
+
+        subprocess.call(['make', '-f', 'Makefile.arm', 'clean'])
 
 
 def int32_to_bytes(num):

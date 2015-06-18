@@ -1,6 +1,6 @@
 run_interceptor:
     push    {r0, r1, r2}
-    ldr     r0, = . + VA + 12
+    ldr     r0, = . + VA + 12 - run_interceptor
     sub     r0, pc, r0  @ r0 = ASLR offset for this process
     ldr     r1, =REL_PLT
     add     r2, r1, r0
@@ -30,9 +30,10 @@ while:
     swi     #0
     @ write(1, "\n", 1)
     mov     r0, #1
-    ldr     r1, =   nl
+    ldr     r1, =nl
     add     r1, r1, pc
-    sub     r1, r1, # . + 4
+    ldr     r4, = . + 4
+    sub     r1, r1, r4
     mov     r2, #1
     mov     r7, #4
     swi     #0
