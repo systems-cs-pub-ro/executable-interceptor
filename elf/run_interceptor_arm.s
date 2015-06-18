@@ -43,6 +43,16 @@ while:
     add     r1, r1, r0
     add     ip, r1, ip, LSL #2
     pop     {r0, r1, r2}
+    @ save the original return address
+    push    {lr}
+    @ return to run_ret_interceptor
+    .set    distance, run_ret_interceptor + VA - run_interceptor
+    ldr     lr, =distance
     ldr     pc, [ip]
+
+run_ret_interceptor:
+    @ return to the original place
+    pop     {pc}
+
 nl:
     .asciz "\n"
