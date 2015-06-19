@@ -1,5 +1,3 @@
-import sys
-
 from elftools.elf.elffile import ELFFile
 from elftools.elf.sections import Section
 
@@ -208,10 +206,3 @@ class XELFFile(ELFFile):
     def is_pie(self):
         # TODO
         pass
-
-
-if __name__ == '__main__':
-    with open(sys.argv[1], 'rb') as stream:
-        xelf = XELFFile(stream)
-
-        print xelf.get_text_padding_size()
