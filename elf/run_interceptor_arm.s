@@ -7,9 +7,10 @@ _start:
     .global run_ret_interceptor
 
 run_interceptor:
-    @sub     sp, sp, #4
-    @push    {ip}
-    @sub     sp, sp, #8
+    @ prepare stack for returning
+    sub     sp, sp, #4      @ space for lr
+    push    {ip}
+    sub     sp, sp, #8      @ space for ASLR and fname
     push    {r0-r11, lr}
     bl      compute_aslr
     bl      compute_fname
@@ -22,15 +23,13 @@ run_interceptor:
     @ call the original function
     bl      compute_ip
 
-    @str     r0, [sp, #13*4]
-    @str     r1, [sp, #14*4]
+    str     r0, [sp, #13*4] @ save ASLR
+    str     r1, [sp, #14*4] @ save fname
 
     pop     {r0-r11, lr}
 
     @ save the original return address
-    push    {lr}
-    @push    {lr}
-    @str     lr, [sp, #12]
+    str     lr, [sp, #12]   @ save lr
 
     @ return set to run_ret_interceptor
     .set    dist_ret, run_ret_interceptor + VA - _start
@@ -38,18 +37,9 @@ run_interceptor:
     ldr     pc, [ip]
 
 run_ret_interceptor:
-    @ return to the original place
-    @push    {r0, r1, ip}
-    @add     sp, #12
-    @pop     {r0, r1, ip, lr}
-    @ldr     ip, [sp, #-5*4]
-    @ldr     r1, [sp, #-6*4]
-    @ldr     r0, [sp, #-7*4]
-    @pop     {r1, r2, r3, lr}
-    @mov     pc, lr
-    @add     sp, #4
-    @pop     {lr}
-    pop     {pc}
+    @ r1 will be ASLR and r2 fname
+    pop     {r1, r2, ip, lr}
+    mov     pc, lr
 
 compute_aslr:
     .set    PC, . + VA + 12 - _start

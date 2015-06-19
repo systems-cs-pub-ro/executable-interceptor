@@ -142,6 +142,12 @@ class ELFPatcher_ARM(ELFPatcher):
     def modify_plt(self, run_interceptor_offset):
         plt = self.elf.get_plt_section()
         for i in xrange(plt.first_entry(), plt.num_entries()):
+            # when I save more than {lr} for the return interceptor, an abort
+            # or illegal instruction is raised unless __libc_start_main (the
+            # first function in any executable) is not instrumented
+            if i - 1 == self.elf.get_dynamic_function_num('__libc_start_main'):
+                continue
+
             plt.seek_for_entry(i)
             self.stream.write(int32_to_bytes(0xe59fc000))  # mov ip, pc
             b = 0xea000000  # branch without offset
