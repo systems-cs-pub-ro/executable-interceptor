@@ -10,6 +10,7 @@ from io import SEEK_CUR
 import subprocess
 import sys
 
+from utils import bytes_to_int32
 from utils import int32_to_bytes
 from xelffile import XELFFile
 
@@ -137,6 +138,57 @@ class ELFPatcher_ARM(ELFPatcher):
 
     def __init__(self, elf):
         ELFPatcher.__init__(self, elf)
+
+    def modify_plt(self, run_interceptor_offset):
+        plt = self.elf.get_plt_section()
+        for i in xrange(plt.first_entry(), plt.num_entries()):
+            plt.seek_for_entry(i)
+            self.stream.write(int32_to_bytes(0xe59fc000))  # mov ip, pc
+            b = 0xea000000  # branch without offset
+            b |= (run_interceptor_offset - self.stream.tell() - 8) >> 2
+            self.stream.write(int32_to_bytes(b))
+            self.stream.write(int32_to_bytes(i - 1))
+
+    def inject_code(self, code):
+        self.stream.seek(self.elf.get_padding_offset())
+        self.stream.write(code)
+
+    def inject(self, interceptor_obj):
+        plt = self.elf.get_plt_section()
+        plt.seek_for_entry(1)
+
+        C2 = bytes_to_int32(self.stream.read(4)) & 0xff
+        C1 = bytes_to_int32(self.stream.read(4)) & 0xff
+        C0 = bytes_to_int32(self.stream.read(4)) & 0xfff
+        C = (C2 << 20) + (C1 << 12) + C0
+        text = self.elf.get_text_segment()
+        C += plt.entry_offset(1) + text['p_vaddr'] - text['p_offset'] + 8
+
+        VA = self.elf.get_padding_addr()
+        REL_PLT_ADDR = self.elf.get_rel_plt_section()['sh_addr']
+        DYNSYM_ADDR = self.elf.get_section_by_name('.dynsym')['sh_addr']
+        DYNSTR_ADDR = self.elf.get_section_by_name('.dynstr')['sh_addr']
+
+        subprocess.call(['make',
+                         '-f'
+                         'Makefile.arm',
+                         'C=' + str(C),
+                         'VA=' + str(VA),
+                         'REL_PLT=' + str(REL_PLT_ADDR),
+                         'DYNSYM=' + str(DYNSYM_ADDR),
+                         'DYNSTR=' + str(DYNSTR_ADDR),
+                         'INTERCEPTOR_OBJ=' + interceptor_obj])
+
+        with open('all.out', 'rb') as all_out_stream:
+            run_interceptor_offset = self.elf.get_padding_offset()
+            self.modify_plt(run_interceptor_offset)
+
+            all_out = XELFFile(all_out_stream)
+            text = all_out.get_section_by_name('.text')
+            code = text.data()
+            self.inject_code(code)
+
+        subprocess.call(['make', '-f', 'Makefile.arm', 'clean'])
 
 
 def inject(elf_filename, interceptor_obj):
