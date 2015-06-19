@@ -32,13 +32,18 @@ run_interceptor:
     str     lr, [sp, #12]   @ save lr
 
     @ return set to run_ret_interceptor
+    push    {r0}
+    ldr     r0, [sp, #4]    @ aslr
     .set    dist_ret, run_ret_interceptor + VA - _start
     ldr     lr, =dist_ret
+    add     lr, lr, r0
+    pop     {r0}
     ldr     pc, [ip]
 
 run_ret_interceptor:
     @ r1 will be ASLR and r2 fname
     pop     {r1, r2, ip, lr}
+    @ call ret_interceptor
     mov     pc, lr
 
 compute_aslr:
