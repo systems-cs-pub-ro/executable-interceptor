@@ -160,6 +160,8 @@ class ELFPatcher_ARM(ELFPatcher):
         self.stream.write(code)
 
     def inject(self, interceptor_obj):
+        self.elf.extend_padding(1)
+
         plt = self.elf.get_plt_section()
         plt.seek_for_entry(1)
 

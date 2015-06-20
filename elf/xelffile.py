@@ -17,6 +17,7 @@ class XELFFile(ELFFile):
     def __init__(self, stream):
         ELFFile.__init__(self, stream)
         self._dynamic_functions_name_to_num = None
+        self.num_extra_pages = 0
 
     def get_static_symbol(self, symbol):
         symtab = self.get_section_by_name('.symtab')
@@ -186,11 +187,13 @@ class XELFFile(ELFFile):
 
     def get_padding_offset(self):
         text = self.get_text_segment()
-        return text['p_offset'] + text['p_filesz']
+        return text['p_offset'] + text['p_filesz'] \
+            - self.num_extra_pages * self.PAGE_SIZE
 
     def get_padding_addr(self):
         text = self.get_text_segment()
-        return text['p_vaddr'] + text['p_memsz']
+        return text['p_vaddr'] + text['p_memsz'] \
+            - self.num_extra_pages * self.PAGE_SIZE
 
     def get_text_padding_size(self):
         data = self.get_data_segment()
@@ -198,6 +201,54 @@ class XELFFile(ELFFile):
         maximum = self.PAGE_SIZE - self.get_padding_offset() % self.PAGE_SIZE
 
         return min(total, maximum)
+
+    def extend_padding(self, numpages):
+        extrasize = numpages * self.PAGE_SIZE
+        text = self.get_text_segment()
+        textnum = self.get_text_segment_num()
+
+        # update segments
+        for i in xrange(textnum + 1, self.num_segments()):
+            seg = self.get_segment(i)
+            seg.header.p_offset += extrasize
+            self.update_segment(i, seg)
+
+        first = True
+        for i in xrange(0, self.num_sections()):
+            sect = self.get_section(i)
+            if text.section_in_segment(sect):
+                first = False
+            else:
+                if not first:
+                    break
+
+        # update sections
+        for i in xrange(i, self.num_sections()):
+            sect = self.get_section(i)
+            sect.header['sh_offset'] += extrasize
+            self.update_section(sect)
+
+        # update sections table offset
+        self.header.e_shoff += extrasize
+        self.update_header()
+
+        # physically extend the file
+        self.stream.seek(self.get_padding_offset())
+        remaining = self.stream.read()
+        self.stream.seek(self.get_padding_offset())
+        for i in xrange(0, extrasize):
+            self.stream.write('0')
+        self.stream.write(remaining)
+
+        # extend the text segment to take into account the new padding
+        text.header.p_filesz += extrasize
+        text.header.p_memsz += extrasize
+        self.update_segment(textnum, text)
+
+        self.num_extra_pages = numpages
+
+        # reinitialize to acquire the new file
+        ELFFile.__init__(self, self.stream)
 
     def update_header(self):
         self.stream.seek(0)
