@@ -1,3 +1,10 @@
+    .text
+
+_start:
+    .global _start
+    .global dynamic_linker
+    .equ    red_zone_words, 0x10
+
 dynamic_linker:
     pushl   %eax
     movl    $PLT0, %eax
@@ -15,6 +22,20 @@ run_interceptor:
     call    interceptor
     addl    $8, %esp
     popl    %eax
+    movl    $red_zone_words, %ecx
+    subl    $((red_zone_words - 1)*4), %esp
+downstack:
+    movl    ((red_zone_words - 1)*4)(%esp), %edx
+    movl    %edx, (%esp)
+    addl    $4, %esp
+    loop    downstack
+    subl    $(red_zone_words*4), %esp
+    .equ    ra, run_ret_interceptor - _start + VA
+    movl    $ra, 4(%esp)
+    ret
+
+run_ret_interceptor:
+    add     $((red_zone_words - 2)*4), %esp
     ret
 
 pre_main:

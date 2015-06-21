@@ -77,6 +77,7 @@ class ELFPatcher_x86(ELFPatcher):
         DYNSTR_ADDR = self.elf.get_section_by_name('.dynstr')['sh_addr']
         ENTRY_ADDR = self.elf['e_entry']
         ADDITIONAL_DATA_ADDR = self.elf.get_section_by_name('.bss').end_addr()
+        VA = self.elf.get_padding_addr()
 
         subprocess.call(['make',
                          '-f',
@@ -87,6 +88,7 @@ class ELFPatcher_x86(ELFPatcher):
                          'DYN_STR=' + str(DYNSTR_ADDR),
                          'ENTRY=' + str(ENTRY_ADDR),
                          'ADDITIONAL_DATA=' + str(ADDITIONAL_DATA_ADDR),
+                         'VA=' + str(VA),
                          'INTERCEPTOR_OBJ=' + interceptor_obj])
 
         with open('all.out', 'rb') as all_out_stream:
