@@ -168,11 +168,12 @@ class ELFPatcher_x64(ELFPatcher):
         subprocess.call(['make',
                          '-f',
                          'Makefile.x64',
-                         'PLT0=' + str(PLT_ADDR),
+                         'PLT0=' + str(PLT_ADDR - self.elf.get_padding_addr()),
                          'REL_PLT=' + str(REL_PLT_ADDR),
                          'DYN_SYM=' + str(DYNSYM_ADDR),
                          'DYN_STR=' + str(DYNSTR_ADDR),
-                         'ENTRY=' + str(ENTRY_ADDR),
+                         'ENTRY=' +
+                         str(ENTRY_ADDR - self.elf.get_padding_addr()),
                          'ADDITIONAL_DATA=' + str(ADDITIONAL_DATA_ADDR),
                          'INTERCEPTOR_OBJ=' + interceptor_obj])
 

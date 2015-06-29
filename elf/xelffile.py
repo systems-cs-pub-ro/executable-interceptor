@@ -172,11 +172,11 @@ class XELFFile(ELFFile):
         return rel_plt
 
     def get_got_section(self):
-        arch = self.get_machine_arch()
-        if arch == 'x86' or arch == 'x64':
-            return GOTSection(self.get_section_by_name('.got.plt'))
-        elif arch == 'ARM':
-            return GOTSection(self.get_section_by_name('.got'))
+        got = self.get_section_by_name('.got.plt')
+        if got is None:
+            got = self.get_section_by_name('.got')
+
+        return GOTSection(got)
 
     def get_plt_section(self):
         arch = self.get_machine_arch()
