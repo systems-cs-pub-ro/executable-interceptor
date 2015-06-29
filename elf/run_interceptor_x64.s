@@ -4,6 +4,13 @@ _start:
     .global pre_main
 
 run_interceptor:
+    movq    (%rsp), %rax
+    shl     $3, %rax
+    movq    REL_PLT + 8(%rax,%rax,2), %rax
+    shr     $32, %rax
+    shl     $3, %rax
+    movl    DYN_SYM(%rax,%rax,2), %eax
+    leaq    DYN_STR(%eax), %rax
     popq    %rax
     popq    %r10
     cmpq    $0, %r10
