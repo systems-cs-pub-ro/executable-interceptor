@@ -2,18 +2,16 @@
 #include <sys/mman.h>
 #include "interceptor.h"
 
-#define STDERR_FILENO 2
+#define STDERR_FILENO 1
 
 static int my_write(int fd, const void *buf, size_t size)
 {
 	int rc;
 
-	asm("int     $0x80\n"
-	    : "=a" (rc)
-	    : "a" (0x4),
-		  "b" (fd),
-	      "c" (buf),
-	      "d" (size));
+	asm volatile("syscall\n"
+				 : "=a" (rc)
+				 : "a" (0x1), "D" (fd), "S" (buf), "d" (size)
+				 : "cc", "rcx", "memory");
 
 	return rc;
 }
@@ -58,10 +56,11 @@ int init(void *data)
 
 int interceptor(void *data, const char *fname, const unsigned long fid)
 {
-	const char nl = '\n';
+	char nl = '\n';
+	int rc;
 
 	my_write(STDERR_FILENO, fname, my_strlen(fname));
 	my_write(STDERR_FILENO, &nl, 1);
 
-	return 0;
+	return rc;
 }
