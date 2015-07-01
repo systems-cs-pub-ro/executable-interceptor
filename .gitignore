@@ -3,6 +3,7 @@
 *.ko
 *.obj
 *.elf
+*.pyc
 
 # Precompiled Headers
 *.gch
@@ -34,3 +35,6 @@
 # Eclipse files
 .project
 .pydevproject
+
+# Temp and backup files
+*~

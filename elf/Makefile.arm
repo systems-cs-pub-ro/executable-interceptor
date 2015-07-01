@@ -1,0 +1,14 @@
+AS = as
+
+.PHONY: all clean
+
+all: all.out
+
+all.out: run_interceptor_arm1.o $(INTERCEPTOR_OBJ)
+	ld $^ -o $@
+
+run_interceptor_arm1.s: run_interceptor_arm.s
+	cpp -DC=$(C) -DVA=$(VA) -DREL_PLT=$(REL_PLT) -DDYNSYM=$(DYNSYM) -DDYNSTR=$(DYNSTR) $< -o $@
+
+clean:
+	rm -f *.o *~ run_interceptor_arm1.s all.out
