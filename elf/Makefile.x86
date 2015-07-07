@@ -1,14 +1,14 @@
 AS = as
 ASFLAGS = --32
 
-.PHONY: all clean
+.PHONY: all clean $(INTERCEPTOR_OBJ)
 
 all: all.out
 
-all.out: run_interceptor1.o $(INTERCEPTOR_OBJ)
-	ld -e 0 -melf_i386 $^ -o $@
+all.out: run_interceptor1.o gen/src/utils.o gen/src/syscalls.o $(INTERCEPTOR_OBJ)
+	ld -melf_i386 $^ -o $@
 
-run_interceptor1.s: run_interceptor_x86.s
+run_interceptor1.s: gen/asm/run_interceptor_x86.s
 	cpp -DPLT0=$(PLT0) -DREL_PLT=$(REL_PLT) -DDYN_SYM=$(DYN_SYM) -DDYN_STR=$(DYN_STR) -DENTRY=$(ENTRY) -DADDITIONAL_DATA=$(ADDITIONAL_DATA) $< -o $@
 
 clean:

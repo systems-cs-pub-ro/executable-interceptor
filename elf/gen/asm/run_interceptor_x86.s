@@ -1,3 +1,9 @@
+_start:
+    .global _start
+    .global dynamic_linker
+    .global run_interceptor
+    .global pre_main
+
 dynamic_linker:
     pushl   %eax
     movl    $PLT0, %eax

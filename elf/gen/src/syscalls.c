@@ -36,7 +36,7 @@ void *e_mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offse
     asm volatile("int	$0x80\n"
     			 : "=a" (ret_addr)
 				 : "a" (0xc0), "b" (addr), "c" (length), "d" (prot), "S" (flags), "D" (fd)
-				 : "cc", "edi", "esi", "memory");
+				 : "cc", "memory");
 
     return ret_addr;
 }
