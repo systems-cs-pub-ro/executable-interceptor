@@ -202,8 +202,17 @@ class XELFFile(ELFFile):
 
         return min(total, maximum)
 
-    def extend_padding(self, numpages):
+    def get_max_extension_size(self):
+        text = self.get_text_segment()
+        data = self.get_data_segment()
+        data_addr = (data['p_vaddr'] + self.PAGE_SIZE - 1) % self.PAGE_SIZE
+        return data_addr - text['p_vaddr'] - text['p_memsz']
+
+    def extend_padding(self, numpages, all_space):
         extrasize = numpages * self.PAGE_SIZE
+        if all_space:
+            extrasize += self.PAGE_SIZE
+
         text = self.get_text_segment()
         textnum = self.get_text_segment_num()
 
