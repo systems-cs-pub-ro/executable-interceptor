@@ -48,12 +48,12 @@ class ELFPatcher_x86(ELFPatcher):
     def __init__(self, elf):
         ELFPatcher.__init__(self, elf)
 
-    def modify_got(self, dynamic_linker_addr):
+    def modify_got(self):
         got = self.elf.get_got_section()
         for i in xrange(got.first_entry(), got.num_entries()):
             got.seek_for_entry(i)
-            dynamic_linker_addr_bytes = int32_to_bytes(dynamic_linker_addr)
-            self.stream.write(dynamic_linker_addr_bytes)
+            zero_bytes = int32_to_bytes(0)
+            self.stream.write(zero_bytes)
 
     def modify_plt(self, run_interceptor_offset):
         plt = self.elf.get_plt_section()
@@ -94,11 +94,7 @@ class ELFPatcher_x86(ELFPatcher):
             all_out = XELFFile(all_out_stream)
             text = all_out.get_section_by_name('.text')
 
-            dynamic_linker = all_out.get_static_symbol('dynamic_linker')
-            dynamic_linker_off = dynamic_linker['st_value'] - text['sh_addr']
-            dynamic_linker_addr = self.elf.get_padding_addr() \
-                + dynamic_linker_off
-            self.modify_got(dynamic_linker_addr)
+            self.modify_got()
 
             run_interceptor = all_out.get_static_symbol('run_interceptor')
             run_interceptor_off = run_interceptor['st_value'] - text['sh_addr']
