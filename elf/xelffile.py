@@ -172,11 +172,11 @@ class XELFFile(ELFFile):
         return rel_plt
 
     def get_got_section(self):
-        arch = self.get_machine_arch()
-        if arch == 'x86' or arch == 'x64':
-            return GOTSection(self.get_section_by_name('.got.plt'))
-        elif arch == 'ARM':
-            return GOTSection(self.get_section_by_name('.got'))
+        got = self.get_section_by_name('.got.plt')
+        if got is None:
+            got = self.get_section_by_name('.got')
+
+        return GOTSection(got)
 
     def get_plt_section(self):
         arch = self.get_machine_arch()
@@ -202,8 +202,17 @@ class XELFFile(ELFFile):
 
         return min(total, maximum)
 
-    def extend_padding(self, numpages):
+    def get_max_extension_size(self):
+        text = self.get_text_segment()
+        data = self.get_data_segment()
+        data_addr = (data['p_vaddr'] + self.PAGE_SIZE - 1) % self.PAGE_SIZE
+        return data_addr - text['p_vaddr'] - text['p_memsz']
+
+    def extend_padding(self, numpages, all_space):
         extrasize = numpages * self.PAGE_SIZE
+        if all_space:
+            extrasize += self.PAGE_SIZE
+
         text = self.get_text_segment()
         textnum = self.get_text_segment_num()
 
@@ -241,8 +250,8 @@ class XELFFile(ELFFile):
         self.stream.write(remaining)
 
         # extend the text segment to take into account the new padding
-        text.header.p_filesz += extrasize
-        text.header.p_memsz += extrasize
+        text.header.p_filesz += numpages * self.PAGE_SIZE
+        text.header.p_memsz += numpages * self.PAGE_SIZE
         self.update_segment(textnum, text)
 
         self.num_extra_pages = numpages

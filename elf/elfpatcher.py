@@ -12,6 +12,7 @@ import sys
 
 from utils import bytes_to_int32
 from utils import int32_to_bytes
+from utils import int64_to_bytes
 from xelffile import XELFFile
 
 
@@ -47,12 +48,12 @@ class ELFPatcher_x86(ELFPatcher):
     def __init__(self, elf):
         ELFPatcher.__init__(self, elf)
 
-    def modify_got(self, dynamic_linker_addr):
+    def modify_got(self):
         got = self.elf.get_got_section()
         for i in xrange(got.first_entry(), got.num_entries()):
             got.seek_for_entry(i)
-            dynamic_linker_addr_bytes = int32_to_bytes(dynamic_linker_addr)
-            self.stream.write(dynamic_linker_addr_bytes)
+            zero_bytes = int32_to_bytes(0)
+            self.stream.write(zero_bytes)
 
     def modify_plt(self, run_interceptor_offset):
         plt = self.elf.get_plt_section()
@@ -93,11 +94,11 @@ class ELFPatcher_x86(ELFPatcher):
             all_out = XELFFile(all_out_stream)
             text = all_out.get_section_by_name('.text')
 
-            dynamic_linker = all_out.get_static_symbol('dynamic_linker')
-            dynamic_linker_off = dynamic_linker['st_value'] - text['sh_addr']
-            dynamic_linker_addr = self.elf.get_padding_addr() \
-                + dynamic_linker_off
-            self.modify_got(dynamic_linker_addr)
+            code = text.data()
+            if len(code) > self.elf.get_text_padding_size():
+                self.elf.extend_padding(0, True)
+
+            self.modify_got()
 
             run_interceptor = all_out.get_static_symbol('run_interceptor')
             run_interceptor_off = run_interceptor['st_value'] - text['sh_addr']
@@ -120,7 +121,6 @@ class ELFPatcher_x86(ELFPatcher):
                 self.elf.update_symbol(_start)
 
             # inject code
-            code = text.data()
             self.inject_code(code)
 
             self.elf.increase_section('.bss', 8)
@@ -132,6 +132,86 @@ class ELFPatcher_x64(ELFPatcher):
 
     def __init__(self, elf):
         ELFPatcher.__init__(self, elf)
+
+    def modify_got(self):
+        got = self.elf.get_got_section()
+        for i in xrange(got.first_entry(), got.num_entries()):
+            got.seek_for_entry(i)
+            zero_bytes = int64_to_bytes(0)
+            self.stream.write(zero_bytes)
+
+    def modify_plt(self, run_interceptor_offset):
+        plt = self.elf.get_plt_section()
+        for i in xrange(plt.first_entry(), plt.num_entries()):
+            plt.seek_for_entry(i)
+            self.stream.write('\xff\x35')  # opcode for push on x86-64
+            self.stream.seek(10, SEEK_CUR)
+            interceptor_rel_off = run_interceptor_offset - \
+                self.stream.tell() - 4
+            interceptor_rel_off_bytes = int32_to_bytes(interceptor_rel_off)
+            self.stream.write(interceptor_rel_off_bytes)  # jmp interceptor
+
+    def inject_code(self, code):
+        self.stream.seek(self.elf.get_padding_offset())
+        self.stream.write(code)
+
+    def inject(self, interceptor_obj):
+
+        PLT_ADDR = self.elf.get_plt_section()['sh_addr']
+        REL_PLT_ADDR = self.elf.get_rel_plt_section()['sh_addr']
+        DYNSYM_ADDR = self.elf.get_section_by_name('.dynsym')['sh_addr']
+        DYNSTR_ADDR = self.elf.get_section_by_name('.dynstr')['sh_addr']
+        ENTRY_ADDR = self.elf['e_entry']
+        ADDITIONAL_DATA_ADDR = self.elf.get_section_by_name('.bss').end_addr()
+
+        subprocess.call(['make',
+                         '-f',
+                         'Makefile.x64',
+                         'PLT0=' + str(PLT_ADDR - self.elf.get_padding_addr()),
+                         'REL_PLT=' + str(REL_PLT_ADDR),
+                         'DYN_SYM=' + str(DYNSYM_ADDR),
+                         'DYN_STR=' + str(DYNSTR_ADDR),
+                         'ENTRY=' +
+                         str(ENTRY_ADDR - self.elf.get_padding_addr()),
+                         'ADDITIONAL_DATA=' + str(ADDITIONAL_DATA_ADDR),
+                         'INTERCEPTOR_OBJ=' + interceptor_obj])
+
+        with open('all.out', 'rb') as all_out_stream:
+            all_out = XELFFile(all_out_stream)
+            text = all_out.get_section_by_name('.text')
+
+            code = text.data()
+            if len(code) > self.elf.get_text_padding_size():
+                self.elf.extend_padding(1, False)
+
+            self.modify_got()
+
+            run_interceptor = all_out.get_static_symbol('run_interceptor')
+            run_interceptor_off = run_interceptor['st_value'] - text['sh_addr']
+            run_interceptor_offset = \
+                self.elf.get_padding_offset() + run_interceptor_off
+            self.modify_plt(run_interceptor_offset)
+
+            pre_main = all_out.get_static_symbol('pre_main')
+            pre_main_off = pre_main['st_value'] - text['sh_addr']
+            pre_main_addr = self.elf.get_padding_addr() + pre_main_off
+
+            # update the entry point
+            self.elf.header.e_entry = pre_main_addr
+            self.elf.update_header()
+
+            # update _start label, if any
+            _start = self.elf.get_static_symbol('_start')
+            if _start is not None:
+                _start.entry.st_value = pre_main_addr
+                self.elf.update_symbol(_start)
+
+            # inject code
+            self.inject_code(code)
+
+            self.elf.increase_section('.bss', 8)
+
+        subprocess.call(['make', '-f', 'Makefile.x64', 'clean'])
 
 
 class ELFPatcher_ARM(ELFPatcher):

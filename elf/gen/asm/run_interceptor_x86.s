@@ -1,7 +1,7 @@
-dynamic_linker:
-    pushl   %eax
-    movl    $PLT0, %eax
-    jmp     *%eax
+_start:
+    .global _start
+    .global run_interceptor
+    .global pre_main
 
 run_interceptor:
     movl    (%esp), %eax
@@ -15,7 +15,14 @@ run_interceptor:
     call    interceptor
     addl    $8, %esp
     popl    %eax
-    ret
+    popl    %edx
+    test    %edx, %edx
+    jnz     direct
+    pushl   %eax
+    movl    $PLT0, %eax
+    jmp     *%eax
+direct:
+    jmp     *%edx
 
 pre_main:
     # need to save the initial state because if some register is changed,
