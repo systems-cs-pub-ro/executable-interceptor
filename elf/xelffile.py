@@ -250,8 +250,8 @@ class XELFFile(ELFFile):
         self.stream.write(remaining)
 
         # extend the text segment to take into account the new padding
-        text.header.p_filesz += extrasize
-        text.header.p_memsz += extrasize
+        text.header.p_filesz += numpages * self.PAGE_SIZE
+        text.header.p_memsz += numpages * self.PAGE_SIZE
         self.update_segment(textnum, text)
 
         self.num_extra_pages = numpages

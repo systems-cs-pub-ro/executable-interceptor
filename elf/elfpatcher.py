@@ -94,6 +94,10 @@ class ELFPatcher_x86(ELFPatcher):
             all_out = XELFFile(all_out_stream)
             text = all_out.get_section_by_name('.text')
 
+            code = text.data()
+            if len(code) > self.elf.get_text_padding_size():
+                self.elf.extend_padding(0, True)
+
             self.modify_got()
 
             run_interceptor = all_out.get_static_symbol('run_interceptor')
@@ -117,7 +121,6 @@ class ELFPatcher_x86(ELFPatcher):
                 self.elf.update_symbol(_start)
 
             # inject code
-            code = text.data()
             self.inject_code(code)
 
             self.elf.increase_section('.bss', 8)
