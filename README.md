@@ -22,4 +22,4 @@ where *elf-file* is the ELF executable file and *intcerp-obj* is the object file
 
 Examples
 --------
-You can use the code from the *examples* directory that defines a simple program and an interceptor that displays the name of each function it intercepts, to stderr via a write syscall.
+You can use the code from the *examples* directory that defines a simple program and an interceptor that displays the name of each function it intercepts.  It uses the *write* syscall for printing.  You can also test it on bigger and more important executables like those from */bin* or */usr/bin*.
